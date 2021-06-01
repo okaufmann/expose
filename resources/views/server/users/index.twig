@@ -19,8 +19,9 @@
                         <div class="mt-1 sm:mt-0 sm:col-span-2">
                             <div class="max-w-lg flex rounded-md shadow-sm">
                                 <input id="username"
+                                       type="text"
                                        v-model="userForm.name"
-                                       class="flex-1 form-input block w-full rounded-md transition duration-150 ease-in-out sm:text-sm sm:leading-5"/>
+                                       class="flex-1 border-gray-300 block w-full rounded-md transition duration-150 ease-in-out sm:text-sm sm:leading-5"/>
                             </div>
                         </div>
                     </div>
@@ -62,6 +63,21 @@
                             </div>
                         </div>
                     </div>
+                    <div class="sm:grid sm:grid-cols-3 sm:gap-4 sm:items-start sm:pt-5">
+                        <label for="max_connections"
+                               class="block text-sm font-medium leading-5 text-gray-700 sm:mt-px sm:pt-2">
+                            Maximum Open Connections
+                        </label>
+                        <div class="mt-1 sm:mt-0 sm:col-span-2">
+                            <div class="max-w-lg flex rounded-md shadow-sm">
+                                <input id="max_connections"
+                                       type="number"
+                                       min="0"
+                                       v-model="userForm.max_connections"
+                                       class="flex-1 border-gray-300 block w-full rounded-md transition duration-150 ease-in-out sm:text-sm sm:leading-5"/>
+                            </div>
+                        </div>
+                    </div>
                 </div>
                 <div class="mt-8 border-t border-gray-200 pt-5">
                     <div class="flex justify-end">
@@ -78,6 +94,15 @@
         </div>
     </form>
     <div class="-my-2 py-2 overflow-x-auto sm:-mx-6 sm:px-6 lg:-mx-8 lg:px-8">
+        <div class="max-w-lg flex rounded-md shadow-sm mb-8">
+            <input id="search"
+                   type="text"
+                   v-model="search"
+                   autocomplete="off"
+                   placeholder="Search users"
+                   class="flex-1 border-gray-300 block w-full rounded-md transition duration-150 ease-in-out sm:text-sm sm:leading-5"/>
+        </div>
+
         <div
             class="align-middle inline-block min-w-full shadow overflow-hidden sm:rounded-lg border-b border-gray-200">
             <table class="min-w-full" v-if="users.length > 0">
@@ -88,6 +113,9 @@
                     </th>
                     <th class="px-6 py-3 border-b border-gray-200 bg-gray-50 text-left text-xs leading-4 font-medium text-gray-500 uppercase tracking-wider">
                         Auth-Token
+                    </th>
+                    <th class="px-6 py-3 border-b border-gray-200 bg-gray-50 text-left text-xs leading-4 font-medium text-gray-500 uppercase tracking-wider">
+                        Max Connections
                     </th>
                     <th class="px-6 py-3 border-b border-gray-200 bg-gray-50 text-left text-xs leading-4 font-medium text-gray-500 uppercase tracking-wider">
                         Custom Subdomains
@@ -108,6 +136,9 @@
                     </td>
                     <td class="px-6 py-4 whitespace-no-wrap border-b border-gray-200 text-sm leading-5 text-gray-500">
                         @{ user.auth_token }
+                    </td>
+                    <td class="px-6 py-4 whitespace-no-wrap border-b border-gray-200 text-sm leading-5 text-gray-500">
+                        @{ user.max_connections }
                     </td>
                     <td class="px-6 py-4 whitespace-no-wrap border-b border-gray-200 text-sm leading-5 text-gray-500">
                         <span v-if="user.can_specify_subdomains === 0">
@@ -171,24 +202,38 @@
                 delimiters: ['@{', '}'],
 
                 data: {
+                    search: '',
                     userForm: {
                         name: '',
                         can_specify_subdomains: true,
                         can_share_tcp_ports: true,
+                        max_connections: 0,
                         errors: {},
                     },
                     paginated: {{ paginated|json_encode|raw }}
                 },
 
                 computed: {
+                    total : function() {
+                        return this.paginated.total;
+                    },
                     users : function() {
                         return this.paginated.users;
                     }
                 },
 
+                watch: {
+                    search(val) {
+                        if (val.length < 3) {
+                            return;
+                        }
+                        this.getUsers(1);
+                    }
+                },
+
                 methods: {
                     getUsers(page) {
-                        fetch('/api/users?page=' + page)
+                        fetch('/api/users?search='+this.search+'&page=' + page)
                             .then((response) => {
                                 return response.json();
                             }).then((data) => {
@@ -219,6 +264,7 @@
                                 this.userForm.name = '';
                                 this.userForm.can_specify_subdomains = true;
                                 this.userForm.can_share_tcp_ports = true;
+                                this.userForm.max_connections = 0;
                                 this.userForm.errors = {};
                                 this.users.unshift(data.user);
                             }

@@ -3,6 +3,7 @@
 namespace App\Server\Connections;
 
 use App\Contracts\ConnectionManager as ConnectionManagerContract;
+use App\Contracts\StatisticsCollector;
 use App\Contracts\SubdomainGenerator;
 use App\Http\QueryParameters;
 use App\Server\Exceptions\NoFreePortAvailable;
@@ -24,10 +25,14 @@ class ConnectionManager implements ConnectionManagerContract
     /** @var LoopInterface */
     protected $loop;
 
-    public function __construct(SubdomainGenerator $subdomainGenerator, LoopInterface $loop)
+    /** @var StatisticsCollector */
+    protected $statisticsCollector;
+
+    public function __construct(SubdomainGenerator $subdomainGenerator, StatisticsCollector $statisticsCollector, LoopInterface $loop)
     {
         $this->subdomainGenerator = $subdomainGenerator;
         $this->loop = $loop;
+        $this->statisticsCollector = $statisticsCollector;
     }
 
     public function limitConnectionLength(ControlConnection $connection, int $maximumConnectionLength)
@@ -59,6 +64,8 @@ class ConnectionManager implements ConnectionManagerContract
 
         $this->connections[] = $storedConnection;
 
+        $this->statisticsCollector->siteShared($this->getAuthTokenFromConnection($connection));
+
         return $storedConnection;
     }
 
@@ -77,6 +84,8 @@ class ConnectionManager implements ConnectionManagerContract
         );
 
         $this->connections[] = $storedConnection;
+
+        $this->statisticsCollector->portShared($this->getAuthTokenFromConnection($connection));
 
         return $storedConnection;
     }
@@ -155,6 +164,20 @@ class ConnectionManager implements ConnectionManagerContract
         return collect($this->connections)->last(function ($connection) use ($clientId) {
             return $connection->client_id == $clientId;
         });
+    }
+
+    public function findControlConnectionsForIp(string $ip): array
+    {
+        return collect($this->connections)->filter(function (ControlConnection $connection) use ($ip) {
+            return $connection->socket->remoteAddress == $ip;
+        })->toArray();
+    }
+
+    public function findControlConnectionsForAuthToken(string $token): array
+    {
+        return collect($this->connections)->filter(function (ControlConnection $connection) use ($token) {
+            return $connection->authToken === $token;
+        })->toArray();
     }
 
     public function getConnections(): array

@@ -4,17 +4,17 @@ namespace App\Commands;
 
 class ShareCurrentWorkingDirectoryCommand extends ShareCommand
 {
-    protected $signature = 'share-cwd {host?} {--subdomain=} {--auth=} {--server-host=} {--server-port=}';
+    protected $signature = 'share-cwd {host?} {--subdomain=} {--auth=} {--dns=}';
 
     public function handle()
     {
-        $subdomain = $this->detectName();
-        $host = $this->prepareSharedHost($subdomain.'.'.$this->detectTld());
+        $folderName = $this->detectName();
+        $host = $this->prepareSharedHost($folderName.'.'.$this->detectTld());
 
         $this->input->setArgument('host', $host);
 
         if (! $this->option('subdomain')) {
-            $this->input->setOption('subdomain', $subdomain);
+            $this->input->setOption('subdomain', str_replace('.', '-', $folderName));
         }
 
         parent::handle();
@@ -56,7 +56,7 @@ class ShareCurrentWorkingDirectoryCommand extends ShareCommand
             }
         }
 
-        return str_replace('.', '-', basename($projectPath));
+        return basename($projectPath);
     }
 
     protected function detectProtocol($host): string

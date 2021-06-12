@@ -41,6 +41,7 @@ class TunnelMessageController extends Controller
     public function handle(Request $request, ConnectionInterface $httpConnection)
     {
         $subdomain = $this->detectSubdomain($request);
+        $serverHost = $this->detectServerHost($request);
 
         if (is_null($subdomain)) {
             $httpConnection->send(
@@ -51,7 +52,7 @@ class TunnelMessageController extends Controller
             return;
         }
 
-        $controlConnection = $this->connectionManager->findControlConnectionForSubdomain($subdomain);
+        $controlConnection = $this->connectionManager->findControlConnectionForSubdomainAndServerHost($subdomain, $serverHost);
 
         if (is_null($controlConnection)) {
             $httpConnection->send(
@@ -69,9 +70,16 @@ class TunnelMessageController extends Controller
 
     protected function detectSubdomain(Request $request): ?string
     {
-        $subdomain = Str::before($request->getHost(), '.'.$this->configuration->hostname());
+        $serverHost = $this->detectServerHost($request);
 
-        return $subdomain === $request->getHost() ? null : $subdomain;
+        $subdomain = Str::before($request->header('Host'), '.'.$serverHost);
+
+        return $subdomain === $request->header('Host') ? null : $subdomain;
+    }
+
+    protected function detectServerHost(Request $request): ?string
+    {
+        return Str::after($request->header('Host'), '.');
     }
 
     protected function sendRequestToClient(Request $request, ControlConnection $controlConnection, ConnectionInterface $httpConnection)
@@ -114,7 +122,7 @@ class TunnelMessageController extends Controller
     {
         $request::setTrustedProxies([$controlConnection->socket->remoteAddress, '127.0.0.1'], Request::HEADER_X_FORWARDED_ALL);
 
-        $host = $this->configuration->hostname();
+        $host = $controlConnection->serverHost;
 
         if (! $request->isSecure()) {
             $host .= ":{$this->configuration->port()}";

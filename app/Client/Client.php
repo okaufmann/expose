@@ -40,12 +40,12 @@ class Client
         $this->logger = $logger;
     }
 
-    public function share(string $sharedUrl, array $subdomains = [])
+    public function share(string $sharedUrl, array $subdomains = [], $serverHost = null)
     {
         $sharedUrl = $this->prepareSharedUrl($sharedUrl);
 
         foreach ($subdomains as $subdomain) {
-            $this->connectToServer($sharedUrl, $subdomain, $this->configuration->auth());
+            $this->connectToServer($sharedUrl, $subdomain, $serverHost, $this->configuration->auth());
         }
     }
 
@@ -72,7 +72,7 @@ class Client
         return $url;
     }
 
-    public function connectToServer(string $sharedUrl, $subdomain, $authToken = ''): PromiseInterface
+    public function connectToServer(string $sharedUrl, $subdomain, $serverHost = null, $authToken = ''): PromiseInterface
     {
         $deferred = new Deferred();
         $promise = $deferred->promise();
@@ -82,18 +82,18 @@ class Client
         connect($wsProtocol."://{$this->configuration->host()}:{$this->configuration->port()}/expose/control?authToken={$authToken}", [], [
             'X-Expose-Control' => 'enabled',
         ], $this->loop)
-            ->then(function (WebSocket $clientConnection) use ($sharedUrl, $subdomain, $deferred, $authToken) {
+            ->then(function (WebSocket $clientConnection) use ($sharedUrl, $subdomain, $serverHost, $deferred, $authToken) {
                 $this->connectionRetries = 0;
 
                 $connection = ControlConnection::create($clientConnection);
 
-                $connection->authenticate($sharedUrl, $subdomain);
+                $connection->authenticate($sharedUrl, $subdomain, $serverHost);
 
-                $clientConnection->on('close', function () use ($sharedUrl, $subdomain, $authToken) {
+                $clientConnection->on('close', function () use ($sharedUrl, $subdomain, $serverHost, $authToken) {
                     $this->logger->error('Connection to server closed.');
 
-                    $this->retryConnectionOrExit(function () use ($sharedUrl, $subdomain, $authToken) {
-                        $this->connectToServer($sharedUrl, $subdomain, $authToken);
+                    $this->retryConnectionOrExit(function () use ($sharedUrl, $subdomain, $serverHost, $authToken) {
+                        $this->connectToServer($sharedUrl, $subdomain, $serverHost, $authToken);
                     });
                 });
 
@@ -107,19 +107,16 @@ class Client
 
                 $connection->on('authenticated', function ($data) use ($deferred, $sharedUrl) {
                     $httpProtocol = $this->configuration->port() === 443 ? 'https' : 'http';
-                    $host = $this->configuration->host();
-
-                    if ($httpProtocol !== 'https') {
-                        $host .= ":{$this->configuration->port()}";
-                    }
+                    $host = $data->server_host;
 
                     $this->logger->info($data->message);
                     $this->logger->info("Local-URL:\t\t{$sharedUrl}");
                     $this->logger->info("Dashboard-URL:\t\thttp://127.0.0.1:".config()->get('expose.dashboard_port'));
-                    $this->logger->info("Expose-URL:\t\t{$httpProtocol}://{$data->subdomain}.{$host}");
+                    $this->logger->info("Expose-URL:\t\thttp://{$data->subdomain}.{$host}:{$this->configuration->port()}");
+                    $this->logger->info("Expose-URL:\t\thttps://{$data->subdomain}.{$host}");
                     $this->logger->line('');
 
-                    static::$subdomains[] = "{$httpProtocol}://{$data->subdomain}.{$host}";
+                    static::$subdomains[] = "{$httpProtocol}://{$data->subdomain}.{$data->server_host}";
 
                     $deferred->resolve($data);
                 });
